@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <util.h>
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -237,3 +238,4 @@ int llCloseRx()
 
     return 0;
 }
+
