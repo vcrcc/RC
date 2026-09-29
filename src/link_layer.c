@@ -4,10 +4,11 @@
 
 #include "link_layer.h"
 #include "serial_port.h"
+#include "util.h"
 
 #include <stdio.h>
 #include <unistd.h>
-#include <util.h>
+
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
