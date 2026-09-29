@@ -12,6 +12,98 @@
 #define _POSIX_SOURCE 1 // POSIX compliant source
 #define BUF_SIZE 256
 
+#define FLAG 0x7E
+#define A_TX 0x03
+#define A_RX 0x01
+#define C_SET 0x03
+#define C_UA 0x07
+
+typedef enum
+{
+    START,
+    FLAG_RCV,
+    A_RCV,
+    C_RCV,
+    BCC_OK,
+    STOP_STATE
+} State;
+
+int sendSupervisionFrame(unsigned char address, unsigned char control)
+{
+    unsigned char frame[5];
+    frame[0] = FLAG;
+    frame[1] = address;
+    frame[2] = control;
+    frame[3] = address ^ control;
+    frame[4] = FLAG;
+
+    printf("Sending frame: ");
+    for (int i = 0; i < 5; i++)
+    {
+        printf("0x%02X ", (unsigned int)(frame[i] & 0xFF));
+    }
+    printf("\n");
+
+    return writeBytesSerialPort(frame, 5);
+}
+
+int receiveSupervisionFrame(unsigned char expectedA, unsigned char expectedC)
+{
+    State state = START;
+    unsigned char byte = 0;
+
+    while (state != STOP_STATE)
+    {
+        int bytes = readByteSerialPort(&byte);
+        if (bytes > 0)
+        {
+            printf("Byte received: 0x%02X\n", (unsigned int)(byte & 0xFF));
+
+            switch (state)
+            {
+            case START:
+                if (byte == FLAG)
+                    state = FLAG_RCV;
+                break;
+            case FLAG_RCV:
+                if (byte == expectedA)
+                    state = A_RCV;
+                else if (byte == FLAG)
+                    state = FLAG_RCV;
+                else
+                    state = START;
+                break;
+            case A_RCV:
+                if (byte == expectedC)
+                    state = C_RCV;
+                else if (byte == FLAG)
+                    state = FLAG_RCV;
+                else
+                    state = START;
+                break;
+            case C_RCV:
+                if (byte == (expectedA ^ expectedC))
+                    state = BCC_OK;
+                else if (byte == FLAG)
+                    state = FLAG_RCV;
+                else
+                    state = START;
+                break;
+            case BCC_OK:
+                if (byte == FLAG)
+                    state = STOP_STATE;
+                else
+                    state = START;
+                break;
+            default:
+                state = START;
+                break;
+            }
+        }
+    }
+    return 0;
+}
+
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
@@ -30,24 +122,25 @@ int llOpenTx(LinkLayer llParameters)
 
     printf("Serial port %s opened\n", llParameters.serialPort);
 
-    // Create string to send
-    unsigned char buf[BUF_SIZE] = {0};
-
-    for (int i = 0; i < BUF_SIZE; i++)
+    // Enviar trama SET
+    printf("Transmitter: Sending SET frame...\n");
+    if (sendSupervisionFrame(A_TX, C_SET) < 0)
     {
-        buf[i] = 'a' + i % 26;
+        perror("sendSupervisionFrame SET");
+        closeSerialPort();
+        return -1;
     }
 
-    // In non-canonical mode, '\n' does not end the writing.
-    // Test this condition by placing a '\n' in the middle of the buffer.
-    // The whole buffer must be sent even with the '\n'.
-    buf[5] = '\n';
+    // Aguardar trama UA
+    printf("Transmitter: Waiting for UA frame...\n");
+    if (receiveSupervisionFrame(A_TX, C_UA) < 0)
+    {
+        fprintf(stderr, "Error receiving UA frame\n");
+        closeSerialPort();
+        return -1;
+    }
 
-    int bytes = writeBytesSerialPort(buf, BUF_SIZE);
-    printf("%d bytes written to serial port\n", bytes);
-
-    // Wait until all bytes have been written to the serial port
-    sleep(1);
+    printf("Connection successfully established! (UA received)\n");
 
     // Close serial port
     if (closeSerialPort() < 0)
@@ -76,34 +169,25 @@ int llOpenRx(LinkLayer llParameters)
 
     printf("Serial port %s opened\n", llParameters.serialPort);
 
-    // Read from serial port until the 'z' char is received.
-
-    // NOTE: This while() cycle is a simple example showing how to read from the serial port.
-    // It must be changed in order to respect the specifications of the protocol indicated in the Lab guide.
-
-    // TODO: Save the received bytes in a buffer array and print it at the end of the program.
-    volatile int STOP = FALSE;
-    int nBytesBuf = 0;
-
-    while (STOP == FALSE)
+    // Aguardar trama SET
+    printf("Receiver: Waiting for SET frame...\n");
+    if (receiveSupervisionFrame(A_TX, C_SET) < 0)
     {
-        // Read one byte from serial port.
-        // NOTE: You must check how many bytes were actually read by reading the return value.
-        // In this example, we assume that the byte is always read, which may not be true.
-        unsigned char byte;
-        int bytes = readByteSerialPort(&byte);
-        nBytesBuf += bytes;
-
-        printf("Byte received: %c\n", byte);
-
-        if (byte == 'z')
-        {
-            printf("Received 'z' char. Stop reading from serial port.\n");
-            STOP = TRUE;
-        }
+        fprintf(stderr, "Error receiving SET frame\n");
+        closeSerialPort();
+        return -1;
     }
 
-    printf("Total bytes received: %d\n", nBytesBuf);
+    // Responder com trama UA
+    printf("Receiver: Sending UA frame...\n");
+    if (sendSupervisionFrame(A_TX, C_UA) < 0)
+    {
+        perror("sendSupervisionFrame UA");
+        closeSerialPort();
+        return -1;
+    }
+
+    printf("Connection successfully established! (SET received, UA sent)\n");
 
     // Close serial port
     if (closeSerialPort() < 0)
