@@ -3,6 +3,7 @@
 
 #include "link_layer.h"
 #include "serial_port.h"
+#include "state_machine.h"
 #include "util.h"
 
 #include <stdio.h>
@@ -32,15 +33,7 @@ void alarmHandler(int signal)
     printf("Alarm #%d received\n", alarmCount);
 }
 
-typedef enum
-{
-    START,
-    FLAG_RCV,
-    A_RCV,
-    C_RCV,
-    BCC_OK,
-    STOP_STATE
-} State;
+
 
 int sendSupervisionFrame(unsigned char address, unsigned char control)
 {
@@ -61,75 +54,7 @@ int sendSupervisionFrame(unsigned char address, unsigned char control)
     return writeBytesSerialPort(frame, 5);
 }
 
-int receiveSupervisionFrame(unsigned char expectedA, unsigned char expectedC)
-{
-    State state = START;
-    unsigned char byte = 0;
 
-    while (state != STOP_STATE)
-    {
-        int bytes = readByteSerialPort(&byte);
-        if (bytes > 0)
-        {
-            printf("Byte received: 0x%02X\n", (unsigned int)(byte & 0xFF));
-
-            switch (state)
-            {
-            case START:
-                if (byte == FLAG)
-                    state = FLAG_RCV;
-                break;
-
-            case FLAG_RCV:
-                if (byte == expectedA)
-                    state = A_RCV;
-                else if (byte == FLAG)
-                    state = FLAG_RCV;
-                else
-                    state = START;
-                break;
-
-            case A_RCV:
-                if (byte == expectedC)
-                    state = C_RCV;
-                else if (byte == FLAG)
-                    state = FLAG_RCV;
-                else
-                    state = START;
-                break;
-
-            case C_RCV:
-                if (byte == (expectedA ^ expectedC))
-                    state = BCC_OK;
-                else if (byte == FLAG)
-                    state = FLAG_RCV;
-                else
-                    state = START;
-                break;
-
-            case BCC_OK:
-                if (byte == FLAG)
-                    state = STOP_STATE;
-                else
-                    state = START;
-                break;
-
-            default:
-                state = START;
-                break;
-            }
-        }
-        else
-        {
-            // Se o read for interrompido pelo alarme (no Emissor)
-            if (alarmEnabled == FALSE && alarmCount > 0)
-            {
-                return -1;
-            }
-        }
-    }
-    return 0;
-}
 
 ////////////////////////////////////////////////
 // LLOPEN
@@ -178,7 +103,7 @@ int llOpenTx(LinkLayer llParameters)
             alarmEnabled = TRUE;
         }
 
-        if (receiveSupervisionFrame(A_TX, C_UA) == 0)
+        if (receiveTrama(A_TX, C_UA) == 0)
         {
             alarm(0); // Desativa o alarme pendente ao receber UA
             success = 1;
@@ -216,7 +141,7 @@ int llOpenRx(LinkLayer llParameters)
     printf("Serial port %s opened (RX)\n", llParameters.serialPort);
 
     printf("Receiver: Waiting for SET frame...\n");
-    if (receiveSupervisionFrame(A_TX, C_SET) < 0)
+    if (receiveTrama(A_TX, C_SET) < 0)
     {
         fprintf(stderr, "Error receiving SET frame\n");
         closeSerialPort();
