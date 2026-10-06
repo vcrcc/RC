@@ -1,5 +1,4 @@
 // RCOM 2026/2027
-//
 // Link layer protocol implementation
 
 #include "link_layer.h"
@@ -7,8 +6,9 @@
 #include "util.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
-
+#include <signal.h>
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -19,6 +19,18 @@
 #define A_RX 0x01
 #define C_SET 0x03
 #define C_UA 0x07
+
+// Variáveis globais para controlo do alarme
+int alarmEnabled = FALSE;
+int alarmCount = 0;
+
+// Handler para o sinal SIGALRM
+void alarmHandler(int signal)
+{
+    alarmEnabled = FALSE;
+    alarmCount++;
+    printf("Alarm #%d received\n", alarmCount);
+}
 
 typedef enum
 {
@@ -67,6 +79,7 @@ int receiveSupervisionFrame(unsigned char expectedA, unsigned char expectedC)
                 if (byte == FLAG)
                     state = FLAG_RCV;
                 break;
+
             case FLAG_RCV:
                 if (byte == expectedA)
                     state = A_RCV;
@@ -75,6 +88,7 @@ int receiveSupervisionFrame(unsigned char expectedA, unsigned char expectedC)
                 else
                     state = START;
                 break;
+
             case A_RCV:
                 if (byte == expectedC)
                     state = C_RCV;
@@ -83,6 +97,7 @@ int receiveSupervisionFrame(unsigned char expectedA, unsigned char expectedC)
                 else
                     state = START;
                 break;
+
             case C_RCV:
                 if (byte == (expectedA ^ expectedC))
                     state = BCC_OK;
@@ -91,15 +106,25 @@ int receiveSupervisionFrame(unsigned char expectedA, unsigned char expectedC)
                 else
                     state = START;
                 break;
+
             case BCC_OK:
                 if (byte == FLAG)
                     state = STOP_STATE;
                 else
                     state = START;
                 break;
+
             default:
                 state = START;
                 break;
+            }
+        }
+        else
+        {
+            // Se o read for interrompido pelo alarme (no Emissor)
+            if (alarmEnabled == FALSE && alarmCount > 0)
+            {
+                return -1;
             }
         }
     }
@@ -111,40 +136,64 @@ int receiveSupervisionFrame(unsigned char expectedA, unsigned char expectedC)
 ////////////////////////////////////////////////
 int llOpenTx(LinkLayer llParameters)
 {
-    // ----------------------------------------------------
-    // This example code shows how to open the serial port and send a string.
-    // TODO: Adapt and extend this code according to the specifications of the project.
-    // ----------------------------------------------------
-
     if (openSerialPort(llParameters.serialPort, llParameters.baudRate) < 0)
     {
         perror("openSerialPort");
         return -1;
     }
 
-    printf("Serial port %s opened\n", llParameters.serialPort);
+    printf("Serial port %s opened (TX)\n", llParameters.serialPort);
 
-    // Enviar trama SET
-    printf("Transmitter: Sending SET frame...\n");
-    if (sendSupervisionFrame(A_TX, C_SET) < 0)
+    // Configuração do sinal de alarme com sigaction
+    struct sigaction act = {0};
+    act.sa_handler = alarmHandler;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+
+    if (sigaction(SIGALRM, &act, NULL) < 0)
     {
-        perror("sendSupervisionFrame SET");
+        perror("sigaction");
         closeSerialPort();
         return -1;
     }
 
-    // Aguardar trama UA
-    printf("Transmitter: Waiting for UA frame...\n");
-    if (receiveSupervisionFrame(A_TX, C_UA) < 0)
+    alarmCount = 0;
+    alarmEnabled = FALSE;
+    int success = 0;
+
+    // Ciclo de envio e retransmissões por timeout
+    while (alarmCount < llParameters.nRetransmissions && !success)
     {
-        fprintf(stderr, "Error receiving UA frame\n");
+        if (alarmEnabled == FALSE)
+        {
+            printf("Transmitter: Sending SET frame (attempt %d)...\n", alarmCount + 1);
+            if (sendSupervisionFrame(A_TX, C_SET) < 0)
+            {
+                perror("sendSupervisionFrame SET");
+                closeSerialPort();
+                return -1;
+            }
+
+            alarm(llParameters.timeout); // Ativa o alarme
+            alarmEnabled = TRUE;
+        }
+
+        if (receiveSupervisionFrame(A_TX, C_UA) == 0)
+        {
+            alarm(0); // Desativa o alarme pendente ao receber UA
+            success = 1;
+        }
+    }
+
+    if (!success)
+    {
+        fprintf(stderr, "Error: Exceeded maximum number of retransmissions (%d)\n", llParameters.nRetransmissions);
         closeSerialPort();
         return -1;
     }
 
     printf("Connection successfully established! (UA received)\n");
 
-    // Close serial port
     if (closeSerialPort() < 0)
     {
         perror("closeSerialPort");
@@ -158,20 +207,14 @@ int llOpenTx(LinkLayer llParameters)
 
 int llOpenRx(LinkLayer llParameters)
 {
-    // ----------------------------------------------------
-    // This example code shows how to open the serial port and receive a string.
-    // TODO: Adapt and extend this code according to the specifications of the project.
-    // ----------------------------------------------------
-
     if (openSerialPort(llParameters.serialPort, llParameters.baudRate) < 0)
     {
         perror("openSerialPort");
         return -1;
     }
 
-    printf("Serial port %s opened\n", llParameters.serialPort);
+    printf("Serial port %s opened (RX)\n", llParameters.serialPort);
 
-    // Aguardar trama SET
     printf("Receiver: Waiting for SET frame...\n");
     if (receiveSupervisionFrame(A_TX, C_SET) < 0)
     {
@@ -180,7 +223,6 @@ int llOpenRx(LinkLayer llParameters)
         return -1;
     }
 
-    // Responder com trama UA
     printf("Receiver: Sending UA frame...\n");
     if (sendSupervisionFrame(A_TX, C_UA) < 0)
     {
@@ -191,7 +233,6 @@ int llOpenRx(LinkLayer llParameters)
 
     printf("Connection successfully established! (SET received, UA sent)\n");
 
-    // Close serial port
     if (closeSerialPort() < 0)
     {
         perror("closeSerialPort");
@@ -208,8 +249,6 @@ int llOpenRx(LinkLayer llParameters)
 ////////////////////////////////////////////////
 int llSend(const unsigned char *buf, int bufSize)
 {
-    // TODO: Implement this function
-
     return 0;
 }
 
@@ -218,8 +257,6 @@ int llSend(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llReceive(unsigned char *packet)
 {
-    // TODO: Implement this function
-
     return 0;
 }
 
@@ -228,15 +265,10 @@ int llReceive(unsigned char *packet)
 ////////////////////////////////////////////////
 int llCloseTx()
 {
-    // TODO: Implement this function
-
     return 0;
 }
 
 int llCloseRx()
 {
-    // TODO: Implement this function
-
     return 0;
 }
-
