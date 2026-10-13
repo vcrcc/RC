@@ -1,0 +1,15 @@
+netedu@bancada5:~/Desktop/RC$ ./bin/main /dev/ttyUSB0 9600 rx output.gif
+Starting link-layer protocol application
+  - Serial port: /dev/ttyUSB0
+  - Role: rx
+  - Baudrate: 9600
+  - Number of tries: 3
+  - Timeout: 4
+  - Filename: output.gif
+Starting Link Layer (RX)...
+Serial port /dev/ttyUSB0 opened (RX)
+Receiver: Waiting for SET frame...
+Receiver: Sending UA frame...
+Sending frame: 0x7E 0x03 0x07 0x04 0x7E 
+Connection successfully established! (SET received, UA sent)
+Receiver: Ready to receive file packets...
