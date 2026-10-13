@@ -125,6 +125,7 @@ int llOpenTx(LinkLayer llParameters)
     }
 
     printf("Connection successfully established! (UA received)\n");
+    fflush(stdout);
     txSequenceNumber = 0;
     return 0;
 }

@@ -83,11 +83,15 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     else if (strcmp(role, "tx") == 0)
     {
         printf("Starting Link Layer (TX)...\n");
-        if (llOpenTx(llParameters) < 0)
+        fflush(stdout);
+        if (llOpenTx(llParameters) != 0)
         {
             fprintf(stderr, "Error establishing link layer connection (TX)\n");
             return;
         }
+
+        printf("Transmitter: Link layer established! Opening file '%s'...\n", filename);
+        fflush(stdout);
 
         FILE *file = fopen(filename, "rb");
         if (file == NULL)
@@ -103,6 +107,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         rewind(file);
 
         printf("Transmitter: Sending file '%s' (%ld bytes)...\n", filename, fileSize);
+        fflush(stdout);
 
         // Construir e enviar pacote de controlo START (C = 2)
         // Com TLV: T=0 (tamanho do ficheiro), L, V
