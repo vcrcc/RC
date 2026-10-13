@@ -218,10 +218,17 @@ int llSend(const unsigned char *buf, int bufSize)
     unsigned char expectedRR = txSequenceNumber == 0 ? 0x85 : 0x05;
     unsigned char expectedREJ = txSequenceNumber == 0 ? 0x81 : 0x01;
 
+    printf("llSend: Transmitting I-frame (%d bytes, Ns=%d)...\n", frameSize, txSequenceNumber);
+
     while (alarmCount < llParams.nRetransmissions && !success)
     {
         if (alarmEnabled == FALSE || reject)
         {
+            if (reject) {
+                printf("llSend: REJ received, retransmitting immediately...\n");
+            } else if (alarmCount > 0) {
+                printf("llSend: Timeout, retransmitting attempt %d...\n", alarmCount + 1);
+            }
             writeBytesSerialPort(frame, frameSize);
             alarm(llParams.timeout);
             alarmEnabled = TRUE;
@@ -232,9 +239,11 @@ int llSend(const unsigned char *buf, int bufSize)
         if (ret == 1) {
             alarm(0);
             success = 1;
+            printf("llSend: Positive ACK (RR) received for Ns=%d.\n", txSequenceNumber);
         } else if (ret == -2) {
             alarm(0);
             reject = 1;
+            printf("llSend: Negative ACK (REJ) received for Ns=%d.\n", txSequenceNumber);
         }
     }
 
@@ -315,16 +324,22 @@ int llReceive(unsigned char *packet)
                     }
                     if (bcc2 == receivedBcc2) {
                         if (isDuplicate) {
+                            printf("llReceive: Duplicate frame received. Sending RR.\n");
                             sendSupervisionFrame(A_TX, RR_duplicate);
                             state = START; 
                         } else {
+                            printf("llReceive: Valid I-frame received (%d bytes data). Sending RR.\n", dataIdx - 1);
                             sendSupervisionFrame(A_TX, RR);
                             rxSequenceNumber = (rxSequenceNumber + 1) % 2;
                             return dataIdx - 1;
                         }
                     } else {
+                        printf("llReceive: BCC2 error detected! ");
                         if (!isDuplicate) {
+                            printf("Sending REJ.\n");
                             sendSupervisionFrame(A_TX, REJ);
+                        } else {
+                            printf("Duplicate frame with bad BCC2, ignoring.\n");
                         }
                         state = START;
                     }
