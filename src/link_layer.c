@@ -131,7 +131,6 @@ int llOpenTx(LinkLayer llParameters)
 
 int llOpenRx(LinkLayer llParameters)
 {
-    llParams = llParameters;
     if (openSerialPort(llParameters.serialPort, llParameters.baudRate) < 0)
     {
         perror("openSerialPort");
@@ -144,7 +143,6 @@ int llOpenRx(LinkLayer llParameters)
     if (receiveTrama(A_TX, C_SET) < 0)
     {
         fprintf(stderr, "Error receiving SET frame\n");
-        closeSerialPort();
         return -1;
     }
 
@@ -152,13 +150,13 @@ int llOpenRx(LinkLayer llParameters)
     if (sendSupervisionFrame(A_TX, C_UA) < 0)
     {
         perror("sendSupervisionFrame UA");
-        closeSerialPort();
         return -1;
     }
 
     printf("Connection successfully established! (SET received, UA sent)\n");
-    rxSequenceNumber = 0;
-    return 1;
+
+
+    return 0;
 }
 
 ////////////////////////////////////////////////
