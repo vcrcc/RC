@@ -1,3 +1,52 @@
+netedu@bancada5:~/Desktop/RC$ git branch
+* main
+netedu@bancada5:~/Desktop/RC$ git switch aula3
+branch 'aula3' set up to track 'origin/aula3'.
+Switched to a new branch 'aula3'
+netedu@bancada5:~/Desktop/RC$ git pull
+Already up to date.
+netedu@bancada5:~/Desktop/RC$ git switch main
+Switched to branch 'main'
+Your branch is up to date with 'origin/main'.
+netedu@bancada5:~/Desktop/RC$ git pull
+remote: Enumerating objects: 1, done.
+remote: Counting objects: 100% (1/1), done.
+remote: Total 1 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+Unpacking objects: 100% (1/1), 883 bytes | 176.00 KiB/s, done.
+From https://github.com/vcrcc/RC
+   619c2ca..e7e94d2  main       -> origin/main
+Updating 619c2ca..e7e94d2
+Fast-forward
+ .gitignore          |   1 +
+ src/link_layer.c    | 329 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-------------------------------------------------------
+ src/state_machine.c | 128 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/state_machine.h |  21 ++++++++++++
+ 4 files changed, 375 insertions(+), 104 deletions(-)
+ create mode 100644 .gitignore
+ create mode 100644 src/state_machine.c
+ create mode 100644 src/state_machine.h
+netedu@bancada5:~/Desktop/RC$ ./bin/main /dev/ttyUSB0 9600 rx output.gif
+bash: ./bin/main: No such file or directory
+netedu@bancada5:~/Desktop/RC$ make clean && make
+rm -f bin/main
+rm -f bin/cable
+rm -f penguin-received.gif
+gcc -Wall -o bin/main src/application_layer.c src/link_layer.c src/main.c src/serial_port.c src/state_machine.c src/util.c
+src/link_layer.c: In function ‘llOpenRx’:
+src/link_layer.c:143:9: warning: implicit declaration of function ‘receiveSupervisionFrame’; did you mean ‘sendSupervisionFrame’? [-Wimplicit-function-declaration]
+  143 |     if (receiveSupervisionFrame(A_TX, C_SET) < 0)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~
+      |         sendSupervisionFrame
+/usr/bin/ld: /tmp/ccFMoJft.o: in function `llOpenRx':
+link_layer.c:(.text+0x3ef): undefined reference to `receiveSupervisionFrame'
+collect2: error: ld returned 1 exit status
+make: *** [Makefile:27: bin/main] Error 1
+netedu@bancada5:~/Desktop/RC$ make clean && make
+rm -f bin/main
+rm -f bin/cable
+rm -f penguin-received.gif
+gcc -Wall -o bin/main src/application_layer.c src/link_layer.c src/main.c src/serial_port.c src/state_machine.c src/util.c
+gcc -Wall -o bin/cable cable/cable.c
 netedu@bancada5:~/Desktop/RC$ ./bin/main /dev/ttyUSB0 9600 rx output.gif
 Starting link-layer protocol application
   - Serial port: /dev/ttyUSB0
@@ -13,3 +62,257 @@ Receiver: Sending UA frame...
 Sending frame: 0x7E 0x03 0x07 0x04 0x7E 
 Connection successfully established! (SET received, UA sent)
 Receiver: Ready to receive file packets...
+^C
+netedu@bancada5:~/Desktop/RC$ git status
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   src/application_layer.c
+        modified:   src/link_layer.c
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+        output.gif
+
+no changes added to commit (use "git add" and/or "git commit -a")
+netedu@bancada5:~/Desktop/RC$ git branch
+  aula3
+* main
+netedu@bancada5:~/Desktop/RC$ git status
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   src/application_layer.c
+        modified:   src/link_layer.c
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+        output.gif
+
+no changes added to commit (use "git add" and/or "git commit -a")
+netedu@bancada5:~/Desktop/RC$ git push
+Everything up-to-date
+netedu@bancada5:~/Desktop/RC$ git add .
+netedu@bancada5:~/Desktop/RC$ git status
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+        new file:   output.gif
+        modified:   src/application_layer.c
+        modified:   src/link_layer.c
+
+netedu@bancada5:~/Desktop/RC$ git push
+Everything up-to-date
+netedu@bancada5:~/Desktop/RC$ git commit -m "Implementacao completa da camada da aplicacao tx e rx" 
+[main 406d8aa] Implementacao completa da camada da aplicacao tx e rx
+ 3 files changed, 73 insertions(+), 15 deletions(-)
+ create mode 100644 output.gif
+netedu@bancada5:~/Desktop/RC$ git push
+Enumerating objects: 9, done.
+Counting objects: 100% (9/9), done.
+Delta compression using up to 4 threads
+Compressing objects: 100% (5/5), done.
+Writing objects: 100% (5/5), 1.45 KiB | 740.00 KiB/s, done.
+Total 5 (delta 3), reused 0 (delta 0), pack-reused 0
+remote: Resolving deltas: 100% (3/3), completed with 3 local objects.
+To https://github.com/vcrcc/RC.git
+   e7e94d2..406d8aa  main -> main
+netedu@bancada5:~/Desktop/RC$ ./bin/main /dev/ttyUSB0 9600 rx output.gif
+Starting link-layer protocol application
+  - Serial port: /dev/ttyUSB0
+  - Role: rx
+  - Baudrate: 9600
+  - Number of tries: 3
+  - Timeout: 4
+  - Filename: output.gif
+Starting Link Layer (RX)...
+Serial port /dev/ttyUSB0 opened (RX)
+Receiver: Waiting for SET frame...
+Receiver: Sending UA frame...
+Sending frame: 0x7E 0x03 0x07 0x04 0x7E 
+Connection successfully established! (SET received, UA sent)
+Receiver: Ready to receive file packets...
+^C
+netedu@bancada5:~/Desktop/RC$ ./bin/main /dev/ttyUSB0 9600 rx output.gif
+Starting link-layer protocol application
+  - Serial port: /dev/ttyUSB0
+  - Role: rx
+  - Baudrate: 9600
+  - Number of tries: 3
+  - Timeout: 4
+  - Filename: output.gif
+Starting Link Layer (RX)...
+Serial port /dev/ttyUSB0 opened (RX)
+Receiver: Waiting for SET frame...
+Receiver: Sending UA frame...
+Sending frame: 0x7E 0x03 0x07 0x04 0x7E 
+Connection successfully established! (SET received, UA sent)
+Receiver: Ready to receive file packets...
+^C
+netedu@bancada5:~/Desktop/RC$ git pull
+remote: Enumerating objects: 9, done.
+remote: Counting objects: 100% (9/9), done.
+remote: Compressing objects: 100% (2/2), done.
+remote: Total 5 (delta 3), reused 5 (delta 3), pack-reused 0 (from 0)
+Unpacking objects: 100% (5/5), 2.12 KiB | 241.00 KiB/s, done.
+From https://github.com/vcrcc/RC
+   406d8aa..25c89a8  main       -> origin/main
+Updating 406d8aa..25c89a8
+Fast-forward
+ src/application_layer.c | 95 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---
+ src/link_layer.c        | 37 ++++++++++++++++++++++++++++++-------
+ 2 files changed, 122 insertions(+), 10 deletions(-)
+netedu@bancada5:~/Desktop/RC$ ./bin/main /dev/ttyUSB0 9600 rx output.gif
+Starting link-layer protocol application
+  - Serial port: /dev/ttyUSB0
+  - Role: rx
+  - Baudrate: 9600
+  - Number of tries: 3
+  - Timeout: 4
+  - Filename: output.gif
+Starting Link Layer (RX)...
+Serial port /dev/ttyUSB0 opened (RX)
+Receiver: Waiting for SET frame...
+Receiver: Sending UA frame...
+Sending frame: 0x7E 0x03 0x07 0x04 0x7E 
+Connection successfully established! (SET received, UA sent)
+Receiver: Ready to receive file packets...
+Receiver: Sending UA frame...^C
+netedu@bancada5:~/Desktop/RC$ make clean && make
+rm -f bin/main
+rm -f bin/cable
+rm -f penguin-received.gif
+gcc -Wall -o bin/main src/application_layer.c src/link_layer.c src/main.c src/serial_port.c src/state_machine.c src/util.c
+gcc -Wall -o bin/cable cable/cable.c
+netedu@bancada5:~/Desktop/RC$ ./bin/main /dev/ttyUSB0 9600 rx output.gif
+Starting link-layer protocol application
+  - Serial port: /dev/ttyUSB0
+  - Role: rx
+  - Baudrate: 9600
+  - Number of tries: 3
+  - Timeout: 4
+  - Filename: output.gif
+Starting Link Layer (RX)...
+Serial port /dev/ttyUSB0 opened (RX)
+Receiver: Waiting for SET frame...
+Receiver: Sending UA frame...
+Sending frame: 0x7E 0x03 0x07 0x04 0x7E 
+Connection successfully established! (SET received, UA sent)
+Receiver: Ready to receive file packets...
+^C
+netedu@bancada5:~/Desktop/RC$ git pull
+remote: Enumerating objects: 7, done.
+remote: Counting objects: 100% (7/7), done.
+remote: Compressing objects: 100% (1/1), done.
+remote: Total 4 (delta 3), reused 4 (delta 3), pack-reused 0 (from 0)
+Unpacking objects: 100% (4/4), 756 bytes | 84.00 KiB/s, done.
+From https://github.com/vcrcc/RC
+   25c89a8..18976ee  main       -> origin/main
+Updating 25c89a8..18976ee
+Fast-forward
+ src/link_layer.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+netedu@bancada5:~/Desktop/RC$ make clean && make
+rm -f bin/main
+rm -f bin/cable
+rm -f penguin-received.gif
+gcc -Wall -o bin/main src/application_layer.c src/link_layer.c src/main.c src/serial_port.c src/state_machine.c src/util.c
+gcc -Wall -o bin/cable cable/cable.c
+netedu@bancada5:~/Desktop/RC$ ./bin/main /dev/ttyUSB0 9600 rx output.gif
+Starting link-layer protocol application
+  - Serial port: /dev/ttyUSB0
+  - Role: rx
+  - Baudrate: 9600
+  - Number of tries: 3
+  - Timeout: 4
+  - Filename: output.gif
+Starting Link Layer (RX)...
+Serial port /dev/ttyUSB0 opened (RX)
+Receiver: Waiting for SET frame...
+Receiver: Sending UA frame...
+Sending frame: 0x7E 0x03 0x07 0x04 0x7E 
+Connection successfully established! (SET received, UA sent)
+Receiver: Ready to receive file packets...
+^C
+netedu@bancada5:~/Desktop/RC$ git pull
+remote: Enumerating objects: 4, done.
+remote: Counting objects: 100% (4/4), done.
+remote: Compressing objects: 100% (3/3), done.
+remote: Total 3 (delta 1), reused 0 (delta 0), pack-reused 0 (from 0)
+Unpacking objects: 100% (3/3), 1.19 KiB | 404.00 KiB/s, done.
+From https://github.com/vcrcc/RC
+   18976ee..40d4d21  main       -> origin/main
+Updating 18976ee..40d4d21
+Fast-forward
+ white | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+ create mode 100644 white
+netedu@bancada5:~/Desktop/RC$ git pull
+Already up to date.
+netedu@bancada5:~/Desktop/RC$ make clean && make
+rm -f bin/main
+rm -f bin/cable
+rm -f penguin-received.gif
+gcc -Wall -o bin/main src/application_layer.c src/link_layer.c src/main.c src/serial_port.c src/state_machine.c src/util.c
+gcc -Wall -o bin/cable cable/cable.c
+netedu@bancada5:~/Desktop/RC$ ./bin/main /dev/ttyUSB0 9600 rx output.gif
+Starting link-layer protocol application
+  - Serial port: /dev/ttyUSB0
+  - Role: rx
+  - Baudrate: 9600
+  - Number of tries: 3
+  - Timeout: 4
+  - Filename: output.gif
+Starting Link Layer (RX)...
+Serial port /dev/ttyUSB0 opened (RX)
+Receiver: Waiting for SET frame...
+Receiver: Sending UA frame...
+Sending frame: 0x7E 0x03 0x07 0x04 0x7E 
+Connection successfully established! (SET received, UA sent)
+Receiver: Ready to receive file packets...
+^C
+netedu@bancada5:~/Desktop/RC$ git pull
+remote: Enumerating objects: 9, done.
+remote: Counting objects: 100% (9/9), done.
+remote: Compressing objects: 100% (1/1), done.
+remote: Total 5 (delta 4), reused 5 (delta 4), pack-reused 0 (from 0)
+Unpacking objects: 100% (5/5), 558 bytes | 50.00 KiB/s, done.
+From https://github.com/vcrcc/RC
+   40d4d21..7c1b383  main       -> origin/main
+Updating 40d4d21..7c1b383
+Fast-forward
+ src/application_layer.c | 7 ++++++-
+ src/link_layer.c        | 1 +
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+netedu@bancada5:~/Desktop/RC$ make clean && make
+rm -f bin/main
+rm -f bin/cable
+rm -f penguin-received.gif
+gcc -Wall -o bin/main src/application_layer.c src/link_layer.c src/main.c src/serial_port.c src/state_machine.c src/util.c
+gcc -Wall -o bin/cable cable/cable.c
+netedu@bancada5:~/Desktop/RC$ ./bin/main /dev/ttyUSB0 9600 rx output.gif
+Starting link-layer protocol application
+  - Serial port: /dev/ttyUSB0
+  - Role: rx
+  - Baudrate: 9600
+  - Number of tries: 3
+  - Timeout: 4
+  - Filename: output.gif
+Starting Link Layer (RX)...
+Serial port /dev/ttyUSB0 opened (RX)
+Receiver: Waiting for SET frame...
+Receiver: Sending UA frame...
+Sending frame: 0x7E 0x03 0x07 0x04 0x7E 
+Connection successfully established! (SET received, UA sent)
+Receiver: Ready to receive file packets...
+^C
+netedu@bancada5:~/Desktop/RC$ git pull
+Already up to date.
