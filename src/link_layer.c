@@ -126,11 +126,12 @@ int llOpenTx(LinkLayer llParameters)
 
     printf("Connection successfully established! (UA received)\n");
     txSequenceNumber = 0;
-    return 1;
+    return 0;
 }
 
 int llOpenRx(LinkLayer llParameters)
 {
+    llParams = llParameters;
     if (openSerialPort(llParameters.serialPort, llParameters.baudRate) < 0)
     {
         perror("openSerialPort");
@@ -139,10 +140,24 @@ int llOpenRx(LinkLayer llParameters)
 
     printf("Serial port %s opened (RX)\n", llParameters.serialPort);
 
+    // Configuração do sinal de alarme com sigaction para o RX (necessário para o llCloseRx)
+    struct sigaction act = {0};
+    act.sa_handler = alarmHandler;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+
+    if (sigaction(SIGALRM, &act, NULL) < 0)
+    {
+        perror("sigaction");
+        closeSerialPort();
+        return -1;
+    }
+
     printf("Receiver: Waiting for SET frame...\n");
     if (receiveTrama(A_TX, C_SET) < 0)
     {
         fprintf(stderr, "Error receiving SET frame\n");
+        closeSerialPort();
         return -1;
     }
 
@@ -150,12 +165,12 @@ int llOpenRx(LinkLayer llParameters)
     if (sendSupervisionFrame(A_TX, C_UA) < 0)
     {
         perror("sendSupervisionFrame UA");
+        closeSerialPort();
         return -1;
     }
 
     printf("Connection successfully established! (SET received, UA sent)\n");
-
-
+    rxSequenceNumber = 0;
     return 0;
 }
 
@@ -289,6 +304,10 @@ int llReceive(unsigned char *packet)
                 if (byte == ESC) {
                     state = DATA_ESC_RCV;
                 } else if (byte == FLAG) {
+                    if (dataIdx <= 0) {
+                        state = FLAG_RCV;
+                        break;
+                    }
                     unsigned char receivedBcc2 = packet[dataIdx - 1];
                     bcc2 = 0;
                     for (int i = 0; i < dataIdx - 1; i++) {
@@ -310,11 +329,15 @@ int llReceive(unsigned char *packet)
                         state = START;
                     }
                 } else {
-                    packet[dataIdx++] = byte;
+                    if (dataIdx < MAX_PAYLOAD_SIZE + 50) {
+                        packet[dataIdx++] = byte;
+                    }
                 }
                 break;
             case DATA_ESC_RCV:
-                packet[dataIdx++] = byte ^ 0x20;
+                if (dataIdx < MAX_PAYLOAD_SIZE + 50) {
+                    packet[dataIdx++] = byte ^ 0x20;
+                }
                 state = DATA_RCV;
                 break;
             default:
@@ -358,7 +381,7 @@ int llCloseTx()
     sendSupervisionFrame(A_TX, C_UA);
     sleep(1); 
     closeSerialPort();
-    return 1;
+    return 0;
 }
 
 int llCloseRx()
@@ -389,5 +412,5 @@ int llCloseRx()
     }
 
     closeSerialPort();
-    return 1;
+    return 0;
 }
