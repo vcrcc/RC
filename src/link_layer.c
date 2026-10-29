@@ -36,7 +36,7 @@ static LinkLayer parameters;
 static int txSequenceNumber = 0;
 static int rxSequenceNumber = 0;
 
-// Protocol statistics
+// estatisticas de envio e rececao
 static int statsFramesSent = 0;
 static int statsFramesReceived = 0;
 static int statsTimeouts = 0;
@@ -44,8 +44,7 @@ static int statsRejSent = 0;
 static int statsRejReceived = 0;
 static int statsDuplicates = 0;
 
-// Alarm function handler.
-// This function will run whenever the signal SIGALRM is received.
+// trata o alarme sigalrm
 static void alarmHandler(int signal) {
   alarmEnabled = FALSE;
   alarmCount++;
@@ -504,13 +503,11 @@ int llCloseTx() {
     sendTrama(A_RX, C_UA);
     printf("UA frame sent to RX\n");
 
-    printf("\n========================================\n");
-    printf("     LINK LAYER TRANSMITTER STATS       \n");
-    printf("========================================\n");
-    printf("  I-Frames sent:               %d\n", statsFramesSent);
-    printf("  Timeouts / Retransmissions:  %d\n", statsTimeouts);
-    printf("  REJ frames received:         %d\n", statsRejReceived);
-    printf("========================================\n\n");
+    printf("\n--- Estatisticas TX ---\n");
+    printf("Tramas I enviadas: %d\n", statsFramesSent);
+    printf("Timeouts: %d\n", statsTimeouts);
+    printf("REJ recebidos: %d\n", statsRejReceived);
+    printf("-----------------------\n\n");
 
     sleep(1); // dar tempo para o rx ler o ua antes de fechar a porta
     if (closeSerialPort() < 0) {
@@ -573,13 +570,11 @@ int llCloseRx() {
 
   printf("UA frame received from TX! Connection closed.\n");
 
-  printf("\n========================================\n");
-  printf("      LINK LAYER RECEIVER STATS         \n");
-  printf("========================================\n");
-  printf("  I-Frames received:           %d\n", statsFramesReceived);
-  printf("  Duplicate frames:            %d\n", statsDuplicates);
-  printf("  REJ frames sent:             %d\n", statsRejSent);
-  printf("========================================\n\n");
+  printf("\n--- Estatisticas RX ---\n");
+  printf("Tramas I recebidas: %d\n", statsFramesReceived);
+  printf("Tramas repetidas: %d\n", statsDuplicates);
+  printf("REJ enviados: %d\n", statsRejSent);
+  printf("-----------------------\n\n");
 
   if (closeSerialPort() < 0) {
     return -1;
