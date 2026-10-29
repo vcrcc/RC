@@ -46,6 +46,7 @@ static int statsDuplicates = 0;
 
 // trata o alarme sigalrm
 static void alarmHandler(int signal) {
+  (void)signal;
   alarmEnabled = FALSE;
   alarmCount++;
   statsTimeouts++;
