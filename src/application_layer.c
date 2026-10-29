@@ -11,6 +11,15 @@
 
 #define MAX_PAYLOAD_SIZE 1000
 
+// Tipos de pacotes da camada de aplicacao (Guiao 2026/2027, Slide 28)
+#define CTRL_START 1
+#define CTRL_DATA  2
+#define CTRL_END   3
+
+// Parametros TLV para pacotes de controlo
+#define TYPE_FILE_SIZE 0
+#define TYPE_FILE_NAME 1
+
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
@@ -42,6 +51,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
         unsigned char packet[MAX_PAYLOAD_SIZE + 100];
         int bytesRead;
+        long expectedFileSize = -1;
+        long totalBytesWritten = 0;
 
         while ((bytesRead = llReceive(packet)) >= 0)
         {
@@ -50,24 +61,69 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
             unsigned char controlByte = packet[0];
 
-            if (controlByte == 2) // Pacote de Controlo START
+            // START Control Packet (C = 1 no guiao 2026/2027)
+            if (controlByte == CTRL_START)
             {
-                printf("Receiver: START control packet received.\n");
+                int idx = 1;
+                while (idx + 1 < bytesRead)
+                {
+                    unsigned char type = packet[idx++];
+                    unsigned char length = packet[idx++];
+                    if (type == TYPE_FILE_SIZE && idx + length <= bytesRead)
+                    {
+                        expectedFileSize = 0;
+                        for (int i = 0; i < length; i++)
+                        {
+                            expectedFileSize = (expectedFileSize << 8) | packet[idx + i];
+                        }
+                    }
+                    idx += length;
+                }
+                printf("Receiver: START control packet received. Expected file size: %ld bytes\n", expectedFileSize);
             }
-            else if (controlByte == 1) // Pacote de DADOS
+            // DATA Packet (C = 2 no guiao 2026/2027)
+            else if (controlByte == CTRL_DATA)
             {
-                // packet[0] = 1 (Campo de controlo)
-                // packet[1] = Número de sequência
-                // packet[2] = L2 (Byte alto do tamanho)
-                // packet[3] = L1 (Byte baixo do tamanho)
-                int dataSize = 256 * packet[2] + packet[3];
+                int dataSize = 0;
+                unsigned char *dataPtr = NULL;
 
-                fwrite(packet + 4, 1, dataSize, file);
-                printf("Receiver: DATA packet received (%d bytes, sequence %d)\n", dataSize, packet[1]);
+                if (controlByte == CTRL_DATA)
+                {
+                    // Formato oficial 2026/2027: [ C=2 | L2 | L1 | dados... ]
+                    dataSize = 256 * packet[1] + packet[2];
+                    dataPtr = packet + 3;
+                }
+                else
+                {
+                    // Formato legado: [ C=1 | seq | L2 | L1 | dados... ]
+                    dataSize = 256 * packet[2] + packet[3];
+                    dataPtr = packet + 4;
+                }
+
+                if (dataSize > 0)
+                {
+                    fwrite(dataPtr, 1, dataSize, file);
+                    totalBytesWritten += dataSize;
+                    printf("Receiver: DATA packet received (%d bytes, total written: %ld)\n", dataSize, totalBytesWritten);
+                }
             }
-            else if (controlByte == 3) // Pacote de Controlo END
+            // END Control Packet (C = 3)
+            else if (controlByte == CTRL_END)
             {
                 printf("Receiver: END control packet received. Transfer complete.\n");
+                if (expectedFileSize >= 0)
+                {
+                    if (totalBytesWritten == expectedFileSize)
+                    {
+                        printf("Receiver: File integrity check PASSED (%ld / %ld bytes received).\n",
+                               totalBytesWritten, expectedFileSize);
+                    }
+                    else
+                    {
+                        fprintf(stderr, "Receiver: WARNING - File size mismatch! Received %ld bytes, expected %ld bytes.\n",
+                                totalBytesWritten, expectedFileSize);
+                    }
+                }
                 break;
             }
         }
@@ -109,17 +165,27 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         printf("Transmitter: Sending file '%s' (%ld bytes)...\n", filename, fileSize);
         fflush(stdout);
 
-        // Construir e enviar pacote de controlo START (C = 2)
-        // Com TLV: T=0 (tamanho do ficheiro), L, V
+        // Construir pacote de controlo START (C = 1) com TLV (fileSize e fileName)
         unsigned char startPacket[MAX_PAYLOAD_SIZE];
-        startPacket[0] = 2; // START
-        startPacket[1] = 0; // T: tamanho
-        startPacket[2] = sizeof(long); // L
+        int startPacketSize = 0;
+        startPacket[startPacketSize++] = CTRL_START; // C = 1 (START)
+
+        // TLV: tamanho do ficheiro (T = 0)
+        startPacket[startPacketSize++] = TYPE_FILE_SIZE; // T
+        startPacket[startPacketSize++] = sizeof(long);   // L
         for (int i = 0; i < (int)sizeof(long); i++)
         {
-            startPacket[3 + i] = (fileSize >> (8 * (sizeof(long) - 1 - i))) & 0xFF;
+            startPacket[startPacketSize++] = (fileSize >> (8 * (sizeof(long) - 1 - i))) & 0xFF;
         }
-        int startPacketSize = 3 + sizeof(long);
+
+        // TLV: nome do ficheiro (T = 1)
+        int nameLen = strlen(filename);
+        if (nameLen > 255)
+            nameLen = 255;
+        startPacket[startPacketSize++] = TYPE_FILE_NAME; // T
+        startPacket[startPacketSize++] = (unsigned char)nameLen; // L
+        memcpy(startPacket + startPacketSize, filename, nameLen);
+        startPacketSize += nameLen;
 
         if (llSend(startPacket, startPacketSize) < 0)
         {
@@ -130,45 +196,52 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         }
         printf("Transmitter: START control packet sent.\n");
 
-        // Ler e enviar pacotes de DADOS (C = 1)
-        // [ C=1 | sequenceNumber | L2 | L1 | dados... ]
-        int maxChunkSize = MAX_PAYLOAD_SIZE - 4;
+        // Ler e enviar pacotes de DADOS (C = 2)
+        // Formato 2026/2027: [ C=2 | L2 | L1 | dados... ]
+        int maxChunkSize = MAX_PAYLOAD_SIZE - 3;
         unsigned char dataBuffer[maxChunkSize];
         unsigned char dataPacket[MAX_PAYLOAD_SIZE];
-        int sequenceNumber = 0;
+        int packetCount = 0;
         int bytesRead;
 
         while ((bytesRead = fread(dataBuffer, 1, maxChunkSize, file)) > 0)
         {
-            dataPacket[0] = 1; // DATA
-            dataPacket[1] = sequenceNumber % 255;
-            dataPacket[2] = (bytesRead >> 8) & 0xFF; // L2
-            dataPacket[3] = bytesRead & 0xFF;        // L1
-            memcpy(dataPacket + 4, dataBuffer, bytesRead);
+            dataPacket[0] = CTRL_DATA; // C = 2 (DATA)
+            dataPacket[1] = (bytesRead >> 8) & 0xFF; // L2
+            dataPacket[2] = bytesRead & 0xFF;        // L1
+            memcpy(dataPacket + 3, dataBuffer, bytesRead);
 
-            if (llSend(dataPacket, bytesRead + 4) < 0)
+            if (llSend(dataPacket, bytesRead + 3) < 0)
             {
-                fprintf(stderr, "Error sending DATA packet (sequence %d)\n", sequenceNumber);
+                fprintf(stderr, "Error sending DATA packet #%d\n", packetCount);
                 fclose(file);
                 llCloseTx();
                 return;
             }
-            printf("Transmitter: Sent DATA packet (sequence %d, %d bytes)\n", sequenceNumber, bytesRead);
-            sequenceNumber++;
+            printf("Transmitter: Sent DATA packet #%d (%d bytes)\n", packetCount, bytesRead);
+            packetCount++;
         }
 
         fclose(file);
 
-        // Construir e enviar pacote de controlo END (C = 3)
+        // Construir e enviar pacote de controlo END (C = 3) com os mesmos TLVs
         unsigned char endPacket[MAX_PAYLOAD_SIZE];
-        endPacket[0] = 3; // END
-        endPacket[1] = 0; // T: tamanho
-        endPacket[2] = sizeof(long); // L
+        int endPacketSize = 0;
+        endPacket[endPacketSize++] = CTRL_END; // C = 3 (END)
+
+        // TLV: tamanho do ficheiro (T = 0)
+        endPacket[endPacketSize++] = TYPE_FILE_SIZE;
+        endPacket[endPacketSize++] = sizeof(long);
         for (int i = 0; i < (int)sizeof(long); i++)
         {
-            endPacket[3 + i] = (fileSize >> (8 * (sizeof(long) - 1 - i))) & 0xFF;
+            endPacket[endPacketSize++] = (fileSize >> (8 * (sizeof(long) - 1 - i))) & 0xFF;
         }
-        int endPacketSize = 3 + sizeof(long);
+
+        // TLV: nome do ficheiro (T = 1)
+        endPacket[endPacketSize++] = TYPE_FILE_NAME;
+        endPacket[endPacketSize++] = (unsigned char)nameLen;
+        memcpy(endPacket + endPacketSize, filename, nameLen);
+        endPacketSize += nameLen;
 
         if (llSend(endPacket, endPacketSize) < 0)
         {

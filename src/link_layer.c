@@ -36,11 +36,20 @@ static LinkLayer parameters;
 static int txSequenceNumber = 0;
 static int rxSequenceNumber = 0;
 
+// Protocol statistics
+static int statsFramesSent = 0;
+static int statsFramesReceived = 0;
+static int statsTimeouts = 0;
+static int statsRejSent = 0;
+static int statsRejReceived = 0;
+static int statsDuplicates = 0;
+
 // Alarm function handler.
 // This function will run whenever the signal SIGALRM is received.
 static void alarmHandler(int signal) {
   alarmEnabled = FALSE;
   alarmCount++;
+  statsTimeouts++;
 
   printf("Alarm #%d received\n", alarmCount);
 }
@@ -161,6 +170,9 @@ int llOpenTx(LinkLayer llParameters) {
 
   parameters = llParameters;
   txSequenceNumber = 0;
+  statsFramesSent = 0;
+  statsTimeouts = 0;
+  statsRejReceived = 0;
 
   if (openSerialPort(llParameters.serialPort, llParameters.baudRate) < 0) {
     perror("openSerialPort");
@@ -223,6 +235,9 @@ int llOpenRx(LinkLayer llParameters) {
 
   parameters = llParameters;
   rxSequenceNumber = 0;
+  statsFramesReceived = 0;
+  statsDuplicates = 0;
+  statsRejSent = 0;
 
   if (openSerialPort(llParameters.serialPort, llParameters.baudRate) < 0) {
     perror("openSerialPort");
@@ -318,6 +333,7 @@ int llSend(const unsigned char *buf, int bufSize) {
   while (alarmCount < parameters.nRetransmissions) {
     if (alarmEnabled == FALSE) {
       int bytes = writeBytesSerialPort(trama, tramaSize);
+      statsFramesSent++;
       printf("%d bytes written (I frame sent, seq %d, attempt #%d)\n", bytes,
              txSequenceNumber, alarmCount + 1);
       alarm(parameters.timeout);
@@ -344,6 +360,7 @@ int llSend(const unsigned char *buf, int bufSize) {
           return tramaSize;
         } else if (receivedC == expectedREJ) {
           alarm(0);
+          statsRejReceived++;
           printf(
               "Negative ACK (REJ) received! Retransmitting immediately...\n");
           alarmEnabled = FALSE;
@@ -403,6 +420,7 @@ int llReceive(unsigned char *packet) {
 
   // se o bcc2 calculado der diferente, houve erro nos dados e manda rej
   if (calculatedBcc2 != receivedBcc2) {
+    statsRejSent++;
     unsigned char rej = (receivedC == C_I_0) ? C_REJ_0 : C_REJ_1;
     sendTrama(A_TX, rej);
     printf("BCC2 error detected! REJ frame sent\n");
@@ -418,6 +436,7 @@ int llReceive(unsigned char *packet) {
       packet[i] = destuffed[i];
     }
     rxSequenceNumber ^= 1;
+    statsFramesReceived++;
     unsigned char rr = (rxSequenceNumber == 0) ? C_RR_0 : C_RR_1;
     sendTrama(A_TX, rr);
     printf("Frame accepted (seq %d)! RR frame sent\n",
@@ -425,6 +444,7 @@ int llReceive(unsigned char *packet) {
     return dataSize;
   } else {
     // se for duplicada descarta os dados mas responde rr para destravar o tx
+    statsDuplicates++;
     unsigned char rr = (rxSequenceNumber == 0) ? C_RR_0 : C_RR_1;
     sendTrama(A_TX, rr);
     printf("Duplicate frame received! Resent RR\n");
@@ -483,6 +503,14 @@ int llCloseTx() {
     // responde com ua para fechar a ligacao de vez
     sendTrama(A_RX, C_UA);
     printf("UA frame sent to RX\n");
+
+    printf("\n========================================\n");
+    printf("     LINK LAYER TRANSMITTER STATS       \n");
+    printf("========================================\n");
+    printf("  I-Frames sent:               %d\n", statsFramesSent);
+    printf("  Timeouts / Retransmissions:  %d\n", statsTimeouts);
+    printf("  REJ frames received:         %d\n", statsRejReceived);
+    printf("========================================\n\n");
 
     sleep(1); // dar tempo para o rx ler o ua antes de fechar a porta
     if (closeSerialPort() < 0) {
@@ -544,6 +572,14 @@ int llCloseRx() {
   }
 
   printf("UA frame received from TX! Connection closed.\n");
+
+  printf("\n========================================\n");
+  printf("      LINK LAYER RECEIVER STATS         \n");
+  printf("========================================\n");
+  printf("  I-Frames received:           %d\n", statsFramesReceived);
+  printf("  Duplicate frames:            %d\n", statsDuplicates);
+  printf("  REJ frames sent:             %d\n", statsRejSent);
+  printf("========================================\n\n");
 
   if (closeSerialPort() < 0) {
     return -1;
